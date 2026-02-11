@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,76 +15,88 @@ import {
   Volume2,
 } from "lucide-react";
 
+const tracks = [
+  {
+    title: "Vision",
+    artist: "NAQT Vane",
+    src: "/music/sample1.mp3",
+    cover: "/cover/image.jpg",
+  },
+];
+
 export default function MusicPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const [cover, setCover] = useState("/cover/image.jpg");
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const isSeekingRef = useRef(false);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(30);
 
+  const [currentTrackIndex] = useState(0);
+  const [customTrack, setCustomTrack] = useState<any>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  const currentTrack = customTrack || tracks[currentTrackIndex];
+
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const [energy, setEnergy] = useState(0);
 
+
   const togglePlay = async () => {
     if (!audioRef.current) return;
 
-if (!audioContextRef.current && audioRef.current) {
-    const AudioContext =
-      window.AudioContext || (window as any).webkitAudioContext;
+    if (!audioContextRef.current) {
+      const AudioContext =
+        window.AudioContext || (window as any).webkitAudioContext;
 
-    const audioContext = new AudioContext();
-    audioContextRef.current = audioContext;
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
 
-    const source = audioContext.createMediaElementSource(audioRef.current);
-    const analyser = audioContext.createAnalyser();
+      const source = audioContext.createMediaElementSource(audioRef.current);
+      const analyser = audioContext.createAnalyser();
 
-    analyser.fftSize = 1024;
-    analyser.smoothingTimeConstant = 0.8;
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.8;
 
-    source.connect(analyser);
-    analyser.connect(audioContext.destination);
+      source.connect(analyser);
+      analyser.connect(audioContext.destination);
 
-    analyserRef.current = analyser;
+      analyserRef.current = analyser;
 
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-    const tick = () => {
-      analyser.getByteFrequencyData(dataArray);
+      const tick = () => {
+        analyser.getByteFrequencyData(dataArray);
 
-      let sum = 0;
-      for (let i = 0; i < 40; i++) {
-        sum += dataArray[i];
-      }
+        let sum = 0;
+        for (let i = 0; i < 40; i++) {
+          sum += dataArray[i];
+        }
 
-      const avg = sum / 40;
-      const normalized = Math.min(avg / 255, 1);
+        const avg = sum / 40;
+        const normalized = Math.min(avg / 255, 1);
 
-      setEnergy(normalized);
+        setEnergy(normalized);
 
-      requestAnimationFrame(tick);
-    };
+        requestAnimationFrame(tick);
+      };
 
-    tick();
-  }
+      tick();
+    }
 
     if (audioContextRef.current?.state === "suspended") {
       await audioContextRef.current.resume();
     }
 
-    try {
-      if (audioRef.current.paused) {
-        await audioRef.current.play();
-      } else {
-        audioRef.current.pause();
-      }
-    } catch (err) {
-      console.error("Play error:", err);
+    if (audioRef.current.paused) {
+      await audioRef.current.play();
+    } else {
+      audioRef.current.pause();
     }
   };
+
 
   useEffect(() => {
     if (audioRef.current) {
@@ -93,35 +104,49 @@ if (!audioContextRef.current && audioRef.current) {
     }
   }, [volume]);
 
-  
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleLoaded = () => {
+      if (!isNaN(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+
+    audio.addEventListener("loadedmetadata", handleLoaded);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoaded);
+    };
+  }, [currentTrack]);
+
+  useEffect(() => {
+    setProgress(0);
+  }, [currentTrack]);
 
   return (
     <motion.div
-      className="w-125 h-88"
-      initial={{ opacity: 0, y: 40 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
+      className={`w-125 h-88 ${dragActive ? "ring-2 ring-purple-500" : ""}`}
     >
-      <Card
-        className="w-full h-full bg-zinc-900 text-white border-none p-6 rounded-2xl shadow-xl ring-1 ring-purple-500/40
-    shadow-purple-500/30"
-      >
-        {/* AUDIO */}
+      <Card className="relative w-full h-full bg-zinc-900 text-white border-none p-6 rounded-2xl shadow-xl ring-1 ring-purple-500/40 shadow-purple-500/30">
+        
+        {dragActive && (
+          <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-2xl z-50">
+            <p className="text-purple-400 text-lg font-semibold">
+              Drop your music here 🎵
+            </p>
+          </div>
+        )}
+
         <audio
           ref={audioRef}
-          src="/music/sample1.mp3"
+          src={currentTrack.src}
           preload="metadata"
-          onLoadedMetadata={() => {
-            if (!audioRef.current) return;
-            const dur = audioRef.current.duration;
-            if (!isNaN(dur)) {
-              setDuration(dur);
-            }
-          }}
           onTimeUpdate={() => {
             if (!audioRef.current) return;
             if (isSeekingRef.current) return;
-            if (!duration) return; // ⬅️ TAMBAH INI
             setProgress(audioRef.current.currentTime);
           }}
           onPlay={() => setIsPlaying(true)}
@@ -130,19 +155,18 @@ if (!audioContextRef.current && audioRef.current) {
 
         {/* HEADER */}
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-xl bg-linear-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <img
-              src="/cover/image.jpg"
-              alt="Album cover"
-              className="w-16 h-16 rounded-xl object-cover"
-            />
-          </div>
+          <img
+            src={currentTrack.cover}
+            alt="cover"
+            className="w-16 h-16 rounded-xl object-cover"
+          />
 
           <div className="flex-1">
-            <h3 className="font-semibold">Awesome Song Title</h3>
-            <p className="text-sm text-zinc-400">Amazing Artist</p>
+            <h3 className="font-semibold">{currentTrack.title}</h3>
+            <p className="text-sm text-zinc-400">
+              {currentTrack.artist}
+            </p>
 
-            {/* equalizer */}
             <motion.div className="flex items-end gap-1 mt-2 h-6">
               {[0, 1, 2, 3].map((i) => (
                 <motion.span
@@ -151,10 +175,7 @@ if (!audioContextRef.current && audioRef.current) {
                   animate={{
                     height: 8 + energy * (10 + i * 4),
                   }}
-                  transition={{
-                    duration: 0.1,
-                    ease: "easeOut",
-                  }}
+                  transition={{ duration: 0.1 }}
                 />
               ))}
             </motion.div>
@@ -163,9 +184,10 @@ if (!audioContextRef.current && audioRef.current) {
 
         {/* PROGRESS */}
         <Slider
-          value={[progress]}
-          max={duration || 1}
+          value={[Math.min(progress, duration || 0)]}
+          max={duration || 0}
           step={0.1}
+          disabled={!duration}
           className="h-2"
           onValueChange={(v) => {
             isSeekingRef.current = true;
@@ -218,12 +240,7 @@ if (!audioContextRef.current && audioRef.current) {
             max={100}
             step={1}
             className="h-2"
-            onValueChange={(v) => {
-              setVolume(v[0]);
-              if (audioRef.current) {
-                audioRef.current.volume = v[0] / 100;
-              }
-            }}
+            onValueChange={(v) => setVolume(v[0])}
           />
         </div>
       </Card>
@@ -232,8 +249,9 @@ if (!audioContextRef.current && audioRef.current) {
 }
 
 function formatTime(time: number) {
-  if (Number.isNaN(time) || time <= 0) return "0:00";
+  if (!time || isNaN(time)) return "0:00";
   const min = Math.floor(time / 60);
   const sec = Math.floor(time % 60);
   return `${min}:${sec.toString().padStart(2, "0")}`;
 }
+
